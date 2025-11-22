@@ -105,7 +105,8 @@
         <h2>DATA SOURCE INPUT (The Game Switch)</h2>
         <label>Paste Public CSV URL Here (Must contain ID, NAME, LOCATION_BRIEF, LOCATION_LINK headers)</label>
         <input type="text" id="csv-url-input" placeholder="e.g., https://docs.google.com/spreadsheets/d/.../pub?output=csv">
-        <button class="load-button" onclick="fetchTalismanData()">LOAD GAME $\rightarrow$ ACTIVATE</button>
+       <button class="load-button" style="width:48%; margin-top:10px; background-color: #0080ff;" onclick="saveGame()">SAVE NEW GAME</button>
+       <button class="load-button" style="width:48%; margin-top:10px;" onclick="loadGameFromInput()">LOAD GAME → ACTIVATE</button>
     </div>
 
     <div class="control-group" id="checklist-output-group" style="display:none;">
@@ -253,3 +254,4 @@ document.addEventListener('DOMContentLoaded', () => {
     // We don't run fetchTalismanData here; we rely only on the button click.
     console.log("Exocortex Console Ready. Paste CSV link and click ACTIVATE.");
 });
+
