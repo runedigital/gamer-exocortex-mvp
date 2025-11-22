@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exocortex Game Tracker Template - Universal Checklist</title>
+    <style>
+        /* Console Aesthetic */
+        body {
+            font-family: 'Roboto Mono', monospace, sans-serif;
+            background-color: #000000;
+            color: #ffffff;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background-color: #0a0a0a;
+            padding: 30px;
+            border-radius: 6px;
+            box-shadow: 0 0 30px rgba(0, 255, 170, 0.2);
+        }
+        h1 {
+            color: #00ffaa;
+            text-align: center;
+            border-bottom: 1px solid #333;
+            padding-bottom: 15px;
+            margin-bottom: 30px;
+            text-transform: uppercase;
+        }
+        h2 {
+            color: #d0d0d0;
+            border-bottom: 1px solid #222;
+            padding-bottom: 5px;
+            margin-top: 20px;
+            font-size: 1.1em;
+            font-weight: 500;
+        }
+        .control-group {
+            margin-bottom: 25px;
+            padding: 20px;
+            border: 1px solid #1f1f1f;
+            border-radius: 4px;
+        }
+        input[type="text"] {
+            width: 70%;
+            padding: 10px;
+            border: 1px solid #333;
+            background-color: #1a1a1a;
+            color: #ffffff;
+            border-radius: 4px;
+            font-family: 'Roboto Mono', monospace;
+        }
+        .load-button {
+            width: 25%;
+            padding: 10px;
+            background-color: #ff3d00;
+            color: #000000;
+            border: none;
+            border-radius: 4px;
+            font-weight: bold;
+            cursor: pointer;
+            float: right;
+        }
+        .load-button:hover { background-color: #ff6e40; }
+        
+        /* Checklist Styles */
+        .talisman-item {
+            padding: 8px 0;
+            border-bottom: 1px dashed #1f1f1f;
+            display: flex;
+            align-items: center;
+            transition: background-color 0.2s;
+        }
+        .talisman-item.acquired {
+            background-color: #111111;
+            opacity: 0.6;
+        }
+        .talisman-item label {
+            flex-grow: 1;
+            margin-left: 10px;
+            cursor: pointer;
+        }
+        .talisman-item a {
+            color: #00ffaa;
+            text-decoration: none;
+        }
+        .talisman-item a:hover {
+            text-decoration: underline;
+        }
+        input[type="checkbox"] {
+            margin: 0;
+            transform: scale(1.2);
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>GAMER EXOCORTEX: UNIVERSAL CHECKLIST</h1>
+    
+    <div class="control-group">
+        <h2>DATA SOURCE INPUT (The Game Switch)</h2>
+        <label>Paste Public CSV URL Here (Must contain ID, NAME, LOCATION_BRIEF, LOCATION_LINK headers)</label>
+        <input type="text" id="csv-url-input" placeholder="e.g., https://docs.google.com/spreadsheets/d/.../pub?output=csv">
+        <button class="load-button" onclick="fetchTalismanData()">LOAD GAME $\rightarrow$ ACTIVATE</button>
+    </div>
+
+    <div class="control-group" id="checklist-output-group" style="display:none;">
+        <h2>ITEM TRACKER <span id="game-name-display" style="color:#00ffaa;"></span></h2>
+        <p style="color:#aaa;">Total Items: <span id="talisman-count">0</span> | Acquired: <span id="acquired-count">0</span> | <button onclick="clearLocalStorage()" style="background: none; border: none; color: #ff3d00; cursor: pointer; padding: 0;">(CLEAR DATA)</button></p>
+        <div id="talisman-list-container" style="max-height: 500px; overflow-y: auto;">
+            </div>
+    </div>
+
+</div>
+
+<script>
+    // Global variable to store all fetched items
+    let allItems = [];
+    const LOCAL_STORAGE_KEY = 'EXOCORTEX_CHECKLIST_PROGRESS'; // Universal storage key
+
+    // --- CORE LOGIC ---
+
+    // 1. Fetch CSV data based on the URL input
+    async function fetchTalismanData() {
+        const csvUrl = document.getElementById('csv-url-input').value.trim();
+        if (!csvUrl) {
+            alert("ERROR: CSV URL is empty. Cannot load game data.");
+            return;
+        }
+        
+        document.getElementById('checklist-output-group').style.display = 'block';
+        document.getElementById('talisman-list-
