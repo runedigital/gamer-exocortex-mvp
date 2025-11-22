@@ -94,6 +94,22 @@
             transform: scale(1.2);
             cursor: pointer;
         }
+        .saved-game-button {
+            background-color: #1f1f1f; color: #00ffaa; border: 1px solid #00ffaa; 
+            padding: 8px 12px; margin: 4px; cursor: pointer; border-radius: 4px;
+        }
+        .saved-game-wrapper {
+             display: inline-block;
+             margin-right: 10px;
+        }
+        .delete-game-button {
+            color: #ff3d00; 
+            margin-left: 5px; 
+            cursor: pointer; 
+            font-weight: bold;
+            vertical-align: top;
+            font-size: 1.2em;
+        }
     </style>
 </head>
 <body>
@@ -102,156 +118,255 @@
     <h1>GAMER EXOCORTEX: UNIVERSAL CHECKLIST</h1>
     
     <div class="control-group">
-        <h2>DATA SOURCE INPUT (The Game Switch)</h2>
-        <label>Paste Public CSV URL Here (Must contain ID, NAME, LOCATION_BRIEF, LOCATION_LINK headers)</label>
-        <input type="text" id="csv-url-input" placeholder="e.g., https://docs.google.com/spreadsheets/d/.../pub?output=csv">
-       <button class="load-button" style="width:48%; margin-top:10px; background-color: #0080ff;" onclick="saveGame()">SAVE NEW GAME</button>
-       <button class="load-button" style="width:48%; margin-top:10px;" onclick="loadGameFromInput()">LOAD GAME → ACTIVATE</button>
+        <h2>SAVED GAMES DASHBOARD (The V1.1 Platform)</h2>
+        <div id="saved-games-list">
+            <p style="color:#aaa;">No games saved. Use the input below to add one.</p>
+        </div>
+        <hr style="border-top: 1px dashed #333; margin: 10px 0;">
+        
+        <label>GAME TITLE (e.g., Elden Ring Talismans)</label>
+        <input type="text" id="game-title-input" placeholder="Enter a descriptive title">
+        
+        <label>CSV DATA SOURCE URL</label>
+        <input type="text" id="csv-url-input" placeholder="Paste the public CSV link here">
+        
+        <button class="load-button" style="width:48%; margin-top:10px; background-color: #0080ff;" onclick="saveGame()">SAVE NEW GAME</button>
+        <button class="load-button" style="width:48%; margin-top:10px;" onclick="loadGameFromInput()">LOAD GAME &rarr; ACTIVATE</button>
     </div>
 
     <div class="control-group" id="checklist-output-group" style="display:none;">
         <h2>ITEM TRACKER <span id="game-name-display" style="color:#00ffaa;"></span></h2>
-        <p style="color:#aaa;">Total Items: <span id="talisman-count">0</span> | Acquired: <span id="acquired-count">0</span> | <button onclick="clearLocalStorage()" style="background: none; border: none; color: #ff3d00; cursor: pointer; padding: 0;">(CLEAR DATA)</button></p>
+        <p style="color:#aaa;">Total Items: <span id="talisman-count">0</span> | Acquired: <span id="acquired-count">0</span> | <button onclick="clearLocalStorage(true)" style="background: none; border: none; color: #ff3d00; cursor: pointer; padding: 0;">(CLEAR CURRENT GAME DATA)</button></p>
         <div id="talisman-list-container" style="max-height: 500px; overflow-y: auto;">
             </div>
     </div>
 
 </div>
 
-// Global variable to store all fetched items
-let allItems = [];
-const LOCAL_STORAGE_KEY = 'EXOCORTEX_CHECKLIST_PROGRESS'; // Universal storage key
+<script>
+    // Global variable to store all fetched items
+    let allItems = [];
+    const CHECKLIST_KEY = 'EXOCORTEX_CHECKLIST_PROGRESS'; // Key for item tracking
+    const GAMES_KEY = 'EXOCORTEX_SAVED_GAMES'; // Key for saving game list
+    const MAX_FREE_GAMES = 3; // The critical freemium limit
 
-// --- CORE LOGIC ---
+    // --- PLATFORM MANAGEMENT LOGIC (V1.1) ---
 
-// 1. Fetch CSV data based on the URL input
-async function fetchTalismanData() {
-    const csvUrl = document.getElementById('csv-url-input').value.trim();
-    if (!csvUrl) {
-        alert("ERROR: CSV URL is empty. Cannot load game data.");
-        return;
-    }
-    
-    document.getElementById('checklist-output-group').style.display = 'block';
-    document.getElementById('talisman-list-container').innerHTML = "<p style='text-align: center; color:#00ffaa;'>LOADING DATA...</p>";
-
-    try {
-        const response = await fetch(csvUrl);
-        const csvText = await response.text();
+    // Renders the list of saved game buttons
+    function renderSavedGames() {
+        const listContainer = document.getElementById('saved-games-list');
+        const savedGames = JSON.parse(localStorage.getItem(GAMES_KEY)) || [];
         
-        // Use the robust parsing function
-        allItems = parseCSV(csvText);
+        listContainer.innerHTML = '';
         
-        // Auto-detect game name from the URL or a simple placeholder
-        const gameNamePlaceholder = csvUrl.split('/')[5] || 'Unknown Game';
-        document.getElementById('game-name-display').innerText = `[${gameNamePlaceholder.toUpperCase().replace(/_/g, ' ')}]`;
+        if (savedGames.length === 0) {
+            listContainer.innerHTML = '<p style="color:#aaa;">No games saved. Add a game below.</p>';
+            return;
+        }
         
-        renderItemList();
-    } catch (error) {
-        console.error("Error fetching or parsing data:", error);
-        document.getElementById('talisman-list-container').innerHTML = `<p style='color:red; text-align: center;'>FATAL ERROR: Parsing Failed. Check Console for details. (Did you use the required headers: TALISMAN_ID, NAME, LOCATION_BRIEF, LOCATION_LINK?)</p>`;
-    }
-}
-
-// 2. ROBUST CSV PARSING FUNCTION (The Fix)
-function parseCSV(csvText) {
-    const lines = csvText.trim().split('\n');
-    if (lines.length < 2) throw new Error("CSV has no data rows.");
-    
-    // Use regex to split headers and clean them up
-    let headers = lines[0].match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || lines[0].split(',');
-    headers = headers.map(h => h.replace(/"/g, '').trim().toUpperCase());
-
-    const data = [];
-    const requiredHeaders = ['TALISMAN_ID', 'NAME', 'LOCATION_BRIEF', 'LOCATION_LINK'];
-    
-    // Check for required headers rigorously
-    if (!requiredHeaders.every(h => headers.includes(h))) {
-        throw new Error(`Invalid CSV headers. Required: ${requiredHeaders.join(', ')}`);
+        savedGames.forEach((game, index) => {
+            const button = document.createElement('button');
+            button.innerText = game.title;
+            button.className = 'saved-game-button';
+            button.onclick = () => loadGameFromButton(game.csvUrl, game.title);
+            
+            const deleteButton = document.createElement('span');
+            deleteButton.innerHTML = '&times;';
+            deleteButton.className = 'delete-game-button';
+            deleteButton.onclick = (e) => {
+                e.stopPropagation(); 
+                deleteGame(index);
+            };
+            
+            const wrapper = document.createElement('div');
+            wrapper.className = 'saved-game-wrapper';
+            wrapper.appendChild(button);
+            wrapper.appendChild(deleteButton);
+            listContainer.appendChild(wrapper);
+        });
     }
 
-    for (let i = 1; i < lines.length; i++) {
-        const line = lines[i];
-        if (!line.trim()) continue;
-
-        // Use regex for values to handle embedded commas/quotes in data
-        const values = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g);
-        if (!values || values.length !== headers.length) {
-             // Skip malformed line, but log it
-             console.warn(`Skipping malformed data line: ${line}`);
-             continue;
+    // Saves the Game from the Input Fields
+    function saveGame() {
+        const title = document.getElementById('game-title-input').value.trim();
+        const csvUrl = document.getElementById('csv-url-input').value.trim();
+        
+        if (!title || !csvUrl) {
+            alert("ERROR: Title and CSV URL must be entered to save a game.");
+            return;
+        }
+        
+        let savedGames = JSON.parse(localStorage.getItem(GAMES_KEY)) || [];
+        
+        if (savedGames.length >= MAX_FREE_GAMES) {
+            alert(`INTELLIGENCE LIMIT REACHED: The free Exocortex allows tracking of only ${MAX_FREE_GAMES} games. Upgrade required to save more.`);
+            return;
         }
 
-        let item = {};
-        for (let j = 0; j < headers.length; j++) {
-            item[headers[j]] = values[j] ? values[j].replace(/"/g, '').trim() : ''; 
-        }
-        data.push(item);
-    }
-    return data;
-}
-
-// 3. Render the list dynamically
-function renderItemList() {
-    const container = document.getElementById('talisman-list-container');
-    container.innerHTML = '';
-    const acquiredList = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY)) || [];
-    let acquiredCount = 0;
-
-    // Sort items by name (optional QoL feature)
-    allItems.sort((a, b) => a.NAME.localeCompare(b.NAME));
-
-    allItems.forEach(item => {
-        const itemId = item.TALISMAN_ID;
-        const isAcquired = acquiredList.includes(itemId);
-        if (isAcquired) acquiredCount++;
+        const newGame = { title: title, csvUrl: csvUrl };
+        savedGames.push(newGame);
+        localStorage.setItem(GAMES_KEY, JSON.stringify(savedGames));
         
-        const itemHtml = `
-            <div id="${itemId}" class="talisman-item ${isAcquired ? 'acquired' : ''}">
-                <input type="checkbox" id="check-${itemId}" 
-                       ${isAcquired ? 'checked' : ''} 
-                       onclick="toggleItem('${itemId}')">
-                <label for="check-${itemId}">
-                    <strong>${item.NAME}</strong> - 
-                    <a href="${item.LOCATION_LINK}" target="_blank">${item.LOCATION_BRIEF}</a>
-                </label>
-            </div>
-        `;
-        container.innerHTML += itemHtml;
+        document.getElementById('game-title-input').value = '';
+        document.getElementById('csv-url-input').value = '';
+        renderSavedGames();
+    }
+
+    // Deletes a saved game
+    function deleteGame(index) {
+        if (!confirm("Are you sure you want to delete this game? This will NOT delete your item tracking data for it.")) return;
+        let savedGames = JSON.parse(localStorage.getItem(GAMES_KEY)) || [];
+        savedGames.splice(index, 1);
+        localStorage.setItem(GAMES_KEY, JSON.stringify(savedGames));
+        renderSavedGames();
+    }
+
+    // Loads a game from the input fields
+    function loadGameFromInput() {
+        const csvUrl = document.getElementById('csv-url-input').value.trim();
+        const title = document.getElementById('game-title-input').value.trim() || "ACTIVATED GAME";
+        loadGame(csvUrl, title);
+    }
+
+    // Loads a game from the selector buttons
+    function loadGameFromButton(csvUrl, title) {
+        document.getElementById('csv-url-input').value = csvUrl;
+        document.getElementById('game-title-input').value = title;
+        loadGame(csvUrl, title);
+    }
+
+    // Universal Loader (The function that talks to the CSV)
+    async function loadGame(csvUrl, title) {
+        if (!csvUrl) {
+            alert("ERROR: CSV URL is empty. Cannot load game data.");
+            return;
+        }
+        
+        // Clear the checklist UI before fetching new data
+        document.getElementById('checklist-output-group').style.display = 'block';
+        document.getElementById('talisman-list-container').innerHTML = "<p style='text-align: center; color:#00ffaa;'>LOADING DATA...</p>";
+        document.getElementById('game-name-display').innerText = `[${title.toUpperCase()}]`;
+
+        try {
+            const response = await fetch(csvUrl);
+            const csvText = await response.text();
+            allItems = parseCSV(csvText);
+            
+            renderItemList();
+        } catch (error) {
+            console.error("Error fetching or parsing data:", error);
+            document.getElementById('talisman-list-container').innerHTML = `<p style='color:red; text-align: center;'>FATAL ERROR: Parsing Failed. Check Console for details. (Did you use the required headers: TALISMAN_ID, NAME, LOCATION_BRIEF, LOCATION_LINK?)</p>`;
+        }
+    }
+
+
+    // --- CORE CHECKLIST LOGIC (Data and Rendering) ---
+
+    function parseCSV(csvText) {
+        const lines = csvText.trim().split('\n');
+        if (lines.length < 2) throw new Error("CSV has no data rows.");
+        
+        let headers = lines[0].match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || lines[0].split(',');
+        headers = headers.map(h => h.replace(/"/g, '').trim().toUpperCase());
+
+        const data = [];
+        const requiredHeaders = ['TALISMAN_ID', 'NAME', 'LOCATION_BRIEF', 'LOCATION_LINK'];
+        
+        if (!requiredHeaders.every(h => headers.includes(h))) {
+            throw new Error(`Invalid CSV headers. Required: ${requiredHeaders.join(', ')}`);
+        }
+
+        for (let i = 1; i < lines.length; i++) {
+            const line = lines[i];
+            if (!line.trim()) continue;
+
+            const values = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g);
+            if (!values || values.length !== headers.length) {
+                 console.warn(`Skipping malformed data line: ${line}`);
+                 continue;
+            }
+
+            let item = {};
+            for (let j = 0; j < headers.length; j++) {
+                item[headers[j]] = values[j] ? values[j].replace(/"/g, '').trim() : ''; 
+            }
+            data.push(item);
+        }
+        return data;
+    }
+
+    function renderItemList() {
+        const container = document.getElementById('talisman-list-container');
+        container.innerHTML = '';
+        
+        const currentTitle = document.getElementById('game-name-display').innerText.replace(/[\[\]]/g, '');
+        const uniqueChecklistKey = `${CHECKLIST_KEY}_${currentTitle}`; 
+
+        const acquiredList = JSON.parse(localStorage.getItem(uniqueChecklistKey)) || [];
+        let acquiredCount = 0;
+
+        allItems.sort((a, b) => a.NAME.localeCompare(b.NAME));
+
+        allItems.forEach(item => {
+            const itemId = item.TALISMAN_ID;
+            const isAcquired = acquiredList.includes(itemId);
+            if (isAcquired) acquiredCount++;
+            
+            const itemHtml = `
+                <div id="${itemId}" class="talisman-item ${isAcquired ? 'acquired' : ''}">
+                    <input type="checkbox" id="check-${itemId}" 
+                           ${isAcquired ? 'checked' : ''} 
+                           onclick="toggleItem('${itemId}')">
+                    <label for="check-${itemId}">
+                        <strong>${item.NAME}</strong> - 
+                        <a href="${item.LOCATION_LINK}" target="_blank">${item.LOCATION_BRIEF}</a>
+                    </label>
+                </div>
+            `;
+            container.innerHTML += itemHtml;
+        });
+
+        document.getElementById('talisman-count').innerText = allItems.length;
+        document.getElementById('acquired-count').innerText = acquiredCount;
+    }
+
+    function toggleItem(itemId) {
+        const currentTitle = document.getElementById('game-name-display').innerText.replace(/[\[\]]/g, '');
+        const uniqueChecklistKey = `${CHECKLIST_KEY}_${currentTitle}`; 
+
+        let acquiredList = JSON.parse(localStorage.getItem(uniqueChecklistKey)) || [];
+        const index = acquiredList.indexOf(itemId);
+
+        if (index > -1) {
+            acquiredList.splice(index, 1); 
+        } else {
+            acquiredList.push(itemId);
+        }
+
+        localStorage.setItem(uniqueChecklistKey, JSON.stringify(acquiredList));
+        renderItemList(); 
+    }
+        
+    function clearLocalStorage(confirmDialog = true) {
+        const currentTitle = document.getElementById('game-name-display').innerText.replace(/[\[\]]/g, '');
+        const uniqueChecklistKey = `${CHECKLIST_KEY}_${currentTitle}`; 
+
+        if (confirmDialog && !confirm(`WARNING: This will CLEAR all saved progress for [${currentTitle}]. Proceed?`)) {
+            return;
+        }
+        localStorage.removeItem(uniqueChecklistKey);
+        
+        if (allItems.length > 0) {
+            renderItemList();
+        }
+        console.log(`Checklist for ${currentTitle} cleared.`);
+    }
+
+
+    // Initial setup: Load the saved games list on startup
+    document.addEventListener('DOMContentLoaded', () => {
+        renderSavedGames();
     });
-
-    document.getElementById('talisman-count').innerText = allItems.length;
-    document.getElementById('acquired-count').innerText = acquiredCount;
-}
-
-// 4. Toggle Item Status and Save to Local Storage
-function toggleItem(itemId) {
-    let acquiredList = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY)) || [];
-    const index = acquiredList.indexOf(itemId);
-
-    if (index > -1) {
-        acquiredList.splice(index, 1); 
-    } else {
-        acquiredList.push(itemId);
-    }
-
-    // Save the updated list
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(acquiredList));
-    renderItemList(); // Re-render to update the display
-}
-    
-// 5. Clear Data Function (Branson's 'New Game' button)
-function clearLocalStorage() {
-    if (confirm("WARNING: This will CLEAR all saved progress for this checklist. Proceed?")) {
-        localStorage.removeItem(LOCAL_STORAGE_KEY);
-        renderItemList(); // Re-render to show empty list
-        console.log("Local storage cleared. New Game started.");
-    }
-}
-
-// Initial setup: Add event listener to the button instead of running on load
-document.addEventListener('DOMContentLoaded', () => {
-    // We don't run fetchTalismanData here; we rely only on the button click.
-    console.log("Exocortex Console Ready. Paste CSV link and click ACTIVATE.");
-});
-
+</script>
+</body>
+</html>
