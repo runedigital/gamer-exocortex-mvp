@@ -117,20 +117,139 @@
 
 </div>
 
-<script>
-    // Global variable to store all fetched items
-    let allItems = [];
-    const LOCAL_STORAGE_KEY = 'EXOCORTEX_CHECKLIST_PROGRESS'; // Universal storage key
+// Global variable to store all fetched items
+let allItems = [];
+const LOCAL_STORAGE_KEY = 'EXOCORTEX_CHECKLIST_PROGRESS'; // Universal storage key
 
-    // --- CORE LOGIC ---
+// --- CORE LOGIC ---
 
-    // 1. Fetch CSV data based on the URL input
-    async function fetchTalismanData() {
-        const csvUrl = document.getElementById('csv-url-input').value.trim();
-        if (!csvUrl) {
-            alert("ERROR: CSV URL is empty. Cannot load game data.");
-            return;
-        }
+// 1. Fetch CSV data based on the URL input
+async function fetchTalismanData() {
+    const csvUrl = document.getElementById('csv-url-input').value.trim();
+    if (!csvUrl) {
+        alert("ERROR: CSV URL is empty. Cannot load game data.");
+        return;
+    }
+    
+    document.getElementById('checklist-output-group').style.display = 'block';
+    document.getElementById('talisman-list-container').innerHTML = "<p style='text-align: center; color:#00ffaa;'>LOADING DATA...</p>";
+
+    try {
+        const response = await fetch(csvUrl);
+        const csvText = await response.text();
         
-        document.getElementById('checklist-output-group').style.display = 'block';
-        document.getElementById('talisman-list-
+        // Use the robust parsing function
+        allItems = parseCSV(csvText);
+        
+        // Auto-detect game name from the URL or a simple placeholder
+        const gameNamePlaceholder = csvUrl.split('/')[5] || 'Unknown Game';
+        document.getElementById('game-name-display').innerText = `[${gameNamePlaceholder.toUpperCase().replace(/_/g, ' ')}]`;
+        
+        renderItemList();
+    } catch (error) {
+        console.error("Error fetching or parsing data:", error);
+        document.getElementById('talisman-list-container').innerHTML = `<p style='color:red; text-align: center;'>FATAL ERROR: Parsing Failed. Check Console for details. (Did you use the required headers: TALISMAN_ID, NAME, LOCATION_BRIEF, LOCATION_LINK?)</p>`;
+    }
+}
+
+// 2. ROBUST CSV PARSING FUNCTION (The Fix)
+function parseCSV(csvText) {
+    const lines = csvText.trim().split('\n');
+    if (lines.length < 2) throw new Error("CSV has no data rows.");
+    
+    // Use regex to split headers and clean them up
+    let headers = lines[0].match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || lines[0].split(',');
+    headers = headers.map(h => h.replace(/"/g, '').trim().toUpperCase());
+
+    const data = [];
+    const requiredHeaders = ['TALISMAN_ID', 'NAME', 'LOCATION_BRIEF', 'LOCATION_LINK'];
+    
+    // Check for required headers rigorously
+    if (!requiredHeaders.every(h => headers.includes(h))) {
+        throw new Error(`Invalid CSV headers. Required: ${requiredHeaders.join(', ')}`);
+    }
+
+    for (let i = 1; i < lines.length; i++) {
+        const line = lines[i];
+        if (!line.trim()) continue;
+
+        // Use regex for values to handle embedded commas/quotes in data
+        const values = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g);
+        if (!values || values.length !== headers.length) {
+             // Skip malformed line, but log it
+             console.warn(`Skipping malformed data line: ${line}`);
+             continue;
+        }
+
+        let item = {};
+        for (let j = 0; j < headers.length; j++) {
+            item[headers[j]] = values[j] ? values[j].replace(/"/g, '').trim() : ''; 
+        }
+        data.push(item);
+    }
+    return data;
+}
+
+// 3. Render the list dynamically
+function renderItemList() {
+    const container = document.getElementById('talisman-list-container');
+    container.innerHTML = '';
+    const acquiredList = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY)) || [];
+    let acquiredCount = 0;
+
+    // Sort items by name (optional QoL feature)
+    allItems.sort((a, b) => a.NAME.localeCompare(b.NAME));
+
+    allItems.forEach(item => {
+        const itemId = item.TALISMAN_ID;
+        const isAcquired = acquiredList.includes(itemId);
+        if (isAcquired) acquiredCount++;
+        
+        const itemHtml = `
+            <div id="${itemId}" class="talisman-item ${isAcquired ? 'acquired' : ''}">
+                <input type="checkbox" id="check-${itemId}" 
+                       ${isAcquired ? 'checked' : ''} 
+                       onclick="toggleItem('${itemId}')">
+                <label for="check-${itemId}">
+                    <strong>${item.NAME}</strong> - 
+                    <a href="${item.LOCATION_LINK}" target="_blank">${item.LOCATION_BRIEF}</a>
+                </label>
+            </div>
+        `;
+        container.innerHTML += itemHtml;
+    });
+
+    document.getElementById('talisman-count').innerText = allItems.length;
+    document.getElementById('acquired-count').innerText = acquiredCount;
+}
+
+// 4. Toggle Item Status and Save to Local Storage
+function toggleItem(itemId) {
+    let acquiredList = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY)) || [];
+    const index = acquiredList.indexOf(itemId);
+
+    if (index > -1) {
+        acquiredList.splice(index, 1); 
+    } else {
+        acquiredList.push(itemId);
+    }
+
+    // Save the updated list
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(acquiredList));
+    renderItemList(); // Re-render to update the display
+}
+    
+// 5. Clear Data Function (Branson's 'New Game' button)
+function clearLocalStorage() {
+    if (confirm("WARNING: This will CLEAR all saved progress for this checklist. Proceed?")) {
+        localStorage.removeItem(LOCAL_STORAGE_KEY);
+        renderItemList(); // Re-render to show empty list
+        console.log("Local storage cleared. New Game started.");
+    }
+}
+
+// Initial setup: Add event listener to the button instead of running on load
+document.addEventListener('DOMContentLoaded', () => {
+    // We don't run fetchTalismanData here; we rely only on the button click.
+    console.log("Exocortex Console Ready. Paste CSV link and click ACTIVATE.");
+});
